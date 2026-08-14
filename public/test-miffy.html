@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Miffy SVG Preview Test</title>
+<style>
+body { margin: 0; padding: 20px; font-family: sans-serif; background: #FFF8F3; }
+.test-grid { display: flex; flex-wrap: wrap; gap: 24px; padding: 20px; }
+.test-cell { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 120px; }
+.test-cell .label { font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+<h2>米菲 SVG 预览测试（确保耳朵完整可见）</h2>
+<div class="test-grid" id="grid"></div>
+<div class="test-grid" id="grid2" style="background:#FFE5EC;border-radius:12px;"></div>
+<script src="/js/miffy.js"></script>
+<script>
+const tests = [
+  ['headOnly(28)', Miffy.headOnly(28, 'orange')],
+  ['headOnly(40)', Miffy.headOnly(40, 'pink')],
+  ['full(80, blue)', Miffy.full(80, 'blue')],
+  ['full(120, orange)', Miffy.full(120, 'orange')],
+  ['tinyMiffy', Miffy.tinyMiffy],
+  ['smallMiffy', Miffy.smallMiffy],
+  ['logo (抱账本)', Miffy.logo],
+  ['success', Miffy.success],
+  ['lowBalance', Miffy.lowBalance],
+  ['noBills', Miffy.noBills],
+  ['miffyBg', Miffy.miffyBg],
+];
+const grid = document.getElementById('grid');
+tests.forEach(([label, svg]) => {
+  const cell = document.createElement('div');
+  cell.className = 'test-cell';
+  cell.innerHTML = `<div style="line-height:0">${svg}</div><div class="label">${label}</div>`;
+  grid.appendChild(cell);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FFFBF5">
+  <title>米菲记账 - 简单可爱的个人记账</title>
+  <link rel="stylesheet" href="/css/style.css?v=20260811b">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('miffy-theme');
+        if (t && t !== 'pink') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Toast 提示 -->
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <!-- 全局遮罩 -->
+  <div id="overlay" class="overlay" style="display:none" onclick="closeModal()"></div>
+
+  <!-- 通用弹窗容器 -->
+  <div id="modal-container" class="modal" style="display:none"></div>
+
+  <!-- 底部导航栏 (手机端) -->
+  <nav id="bottom-nav" class="bottom-nav" style="display:none">
+    <a href="#/home" class="nav-item" data-page="home">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">首页</span>
+    </a>
+    <a href="#/bills" class="nav-item" data-page="bills">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">账单</span>
+    </a>
+    <a href="#/add" class="nav-item nav-center" data-page="add">
+      <span class="nav-icon nav-add-icon">✏️</span>
+      <span class="nav-label">记账</span>
+    </a>
+    <a href="#/modules" class="nav-item" data-page="modules">
+      <span class="nav-icon">📦</span>
+      <span class="nav-label">模块</span>
+    </a>
+    <a href="#/stats" class="nav-item" data-page="stats">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">统计</span>
+    </a>
+    <a href="#/mine" class="nav-item" data-page="mine">
+      <span class="nav-icon">👤</span>
+      <span class="nav-label">我的</span>
+    </a>
+  </nav>
+
+  <script src="/js/miffy.js?v=20260811c"></script>
+  <script src="/js/api.js?v=20260811c"></script>
+  <script src="/js/app.js?v=20260811c"></script>
+</body>
+</html>

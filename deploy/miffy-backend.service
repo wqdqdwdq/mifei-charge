@@ -1,0 +1,18 @@
+[Unit]
+Description=Miffy Account Backend (API + uploads)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/miffy-account/server
+ExecStart=/usr/bin/node index.js
+Environment=PORT=8080
+Environment=NODE_ENV=production
+# 部署时请把下面的 CHANGE_ME 换成真实数据库密码（或改用环境变量注入）
+Environment=DATABASE_URL=postgres://miffy:CHANGE_ME@127.0.0.1:5432/miffy
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Miffy Account Frontend Static Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/miffy-account
+ExecStart=/usr/bin/node frontend-server.js
+Environment=FRONTEND_PORT=8081
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
