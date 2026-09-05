@@ -132,6 +132,9 @@ async function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_bills_fund_module ON bills(fund_module_id);
     CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id, type);
     CREATE INDEX IF NOT EXISTS idx_fund_modules_user ON fund_modules(user_id);
+
+    -- 周期重置：记录模块上次清零的周期键（'YYYY-MM' / 'YYYY-Www'），NULL 表示不限周期
+    ALTER TABLE fund_modules ADD COLUMN IF NOT EXISTS last_reset_period TEXT;
   `);
 }
 

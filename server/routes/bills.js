@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
 const { authMiddleware } = require('../auth');
+const { resetModuleSpent, isBillInCurrentPeriod } = require('../periodUtil');
 
 // 获取账单列表
 router.get('/', authMiddleware, async (req, res) => {
@@ -85,11 +86,14 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // 检查资金模块余额
     let lowBalance = false;
+    let module = null;
     if (type === 'expense' && fund_module_id) {
-      const module = await db.get('SELECT * FROM fund_modules WHERE id = ? AND user_id = ?', [fund_module_id, userId]);
+      module = await db.get('SELECT * FROM fund_modules WHERE id = ? AND user_id = ?', [fund_module_id, userId]);
       if (!module) {
         return res.status(400).json({ error: '资金模块不存在' });
       }
+      // 跨周期自动清零已用金额（预算不变 = 继承上月金额）
+      await resetModuleSpent(db, module);
       const remaining = module.budget_amount - module.spent_amount;
       if (remaining < amount) {
         lowBalance = true;
@@ -103,7 +107,8 @@ router.post('/', authMiddleware, async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [userId, type, amount, category_id, type === 'expense' ? fund_module_id : null, date, remark || '']);
 
-      if (type === 'expense' && fund_module_id) {
+      // 仅当该笔账单属于模块当前周期时计入已用金额，避免历史账单影响本月预算
+      if (type === 'expense' && fund_module_id && isBillInCurrentPeriod(date, module.period_type)) {
         await t.run(`
           UPDATE fund_modules SET spent_amount = spent_amount + ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ? AND user_id = ?
@@ -146,20 +151,32 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     await db.transaction(async (t) => {
-      // 恢复原模块金额
+      // 恢复原模块金额（先跨周期对齐；仅当旧账单属于原模块当前周期才回退）
       if (oldBill.type === 'expense' && oldBill.fund_module_id) {
-        await t.run(`
-          UPDATE fund_modules SET spent_amount = GREATEST(0, spent_amount - ?), updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND user_id = ?
-        `, [oldBill.amount, oldBill.fund_module_id, userId]);
+        const oldMod = await t.get('SELECT * FROM fund_modules WHERE id = ? AND user_id = ?', [oldBill.fund_module_id, userId]);
+        if (oldMod) {
+          await resetModuleSpent(t, oldMod);
+          if (isBillInCurrentPeriod(oldBill.date, oldMod.period_type)) {
+            await t.run(`
+              UPDATE fund_modules SET spent_amount = GREATEST(0, spent_amount - ?), updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND user_id = ?
+            `, [oldBill.amount, oldBill.fund_module_id, userId]);
+          }
+        }
       }
 
-      // 扣除新模块金额
+      // 扣除新模块金额（先跨周期对齐；仅当新账单属于当前周期才计入）
       if (type === 'expense' && fund_module_id) {
-        await t.run(`
-          UPDATE fund_modules SET spent_amount = spent_amount + ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND user_id = ?
-        `, [amount, fund_module_id, userId]);
+        const newMod = await t.get('SELECT * FROM fund_modules WHERE id = ? AND user_id = ?', [fund_module_id, userId]);
+        if (newMod) {
+          await resetModuleSpent(t, newMod);
+          if (isBillInCurrentPeriod(date, newMod.period_type)) {
+            await t.run(`
+              UPDATE fund_modules SET spent_amount = spent_amount + ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND user_id = ?
+            `, [amount, fund_module_id, userId]);
+          }
+        }
       }
 
       // 更新账单
@@ -198,12 +215,18 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     }
 
     await db.transaction(async (t) => {
-      // 恢复模块金额
+      // 恢复模块金额（先跨周期对齐；仅当该账单属于模块当前周期才回退）
       if (bill.type === 'expense' && bill.fund_module_id) {
-        await t.run(`
-          UPDATE fund_modules SET spent_amount = GREATEST(0, spent_amount - ?), updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND user_id = ?
-        `, [bill.amount, bill.fund_module_id, userId]);
+        const delMod = await t.get('SELECT * FROM fund_modules WHERE id = ? AND user_id = ?', [bill.fund_module_id, userId]);
+        if (delMod) {
+          await resetModuleSpent(t, delMod);
+          if (isBillInCurrentPeriod(bill.date, delMod.period_type)) {
+            await t.run(`
+              UPDATE fund_modules SET spent_amount = GREATEST(0, spent_amount - ?), updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND user_id = ?
+            `, [bill.amount, bill.fund_module_id, userId]);
+          }
+        }
       }
 
       // 删除账单

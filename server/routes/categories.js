@@ -122,7 +122,6 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     const category = await db.get('SELECT * FROM categories WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!category) return res.status(404).json({ error: '分类不存在' });
-    if (category.is_default) return res.status(400).json({ error: '默认分类不可删除' });
 
     // 检查是否有账单引用
     const billCount = await db.get('SELECT CAST(COUNT(*) AS INTEGER) as count FROM bills WHERE category_id = ?', [req.params.id]);

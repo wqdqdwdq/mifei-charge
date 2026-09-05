@@ -69,6 +69,7 @@ const App = {
       case 'modules': this.renderModules(); break;
       case 'module-detail': this.renderModuleDetail(); break;
       case 'stats': this.renderStats(); break;
+      case 'family': this.renderFamily(); break;
       case 'mine': this.renderMine(); break;
       case 'categories': this.renderCategoryManage(); break;
       default: this.renderHome();
@@ -92,7 +93,7 @@ const App = {
         <div class="desktop-layout">
           <aside class="desktop-sidebar">
             <div class="desktop-sidebar-logo">
-              <img src="/images/miffy-logo.jpg" alt="米菲" style="width:56px;height:56px;object-fit:contain;border-radius:12px;">
+              <img src="images/miffy-logo.jpg" alt="米菲" style="width:56px;height:56px;object-fit:contain;border-radius:12px;">
               <div class="desktop-sidebar-title">米菲记账</div>
             </div>
             <nav class="desktop-nav">
@@ -111,8 +112,8 @@ const App = {
               <a href="#/stats" class="desktop-nav-item" data-page="stats">
                 <span class="dn-icon">📊</span> 统计
               </a>
-              <a href="#/mine" class="desktop-nav-item" data-page="mine">
-                <span class="dn-icon">👤</span> 我的
+              <a href="#/family" class="desktop-nav-item" data-page="family">
+                <span class="dn-icon">👨‍👩‍👧</span> 家庭
               </a>
             </nav>
             <div style="margin-top:auto;font-size:12px;color:var(--text-light);text-align:center;padding:16px;">
@@ -139,7 +140,7 @@ const App = {
     app.innerHTML = `
       <div class="auth-page">
         <div class="auth-header">
-          <img src="/images/miffy-logo.jpg" alt="米菲" style="width:100px;height:100px;object-fit:contain;border-radius:16px;margin-bottom:8px;">
+          <img src="images/miffy-logo.jpg" alt="米菲" style="width:100px;height:100px;object-fit:contain;border-radius:16px;margin-bottom:8px;">
           <h1 class="auth-title">米菲记账</h1>
           <p class="auth-subtitle">简单的个人账本，可爱的米菲相伴</p>
         </div>
@@ -205,13 +206,15 @@ const App = {
   // ==================== 首页 ====================
   async renderHome() {
     const container = document.getElementById('page-container');
-    container.innerHTML = `<div class="page-header"><h1>🏠 米菲记账</h1></div><div class="page-content"><div class="loading">⏳ 加载中...</div></div>`;
+    container.innerHTML = `<div class="page-header"><h1>🏠 米菲记账</h1></div><div class="page-content">${this.loadingHtml()}</div>`;
 
     try {
-      const [overviewData, modulesData, billsData] = await Promise.all([
+      const [overviewData, modulesData, billsData, familyStatus] = await Promise.all([
         API.getStatsOverview(this.state.currentYear, this.state.currentMonth),
         API.getModules(),
-        API.getBills({ limit: 5 })
+        API.getBills({ limit: 5 }),
+        // 家庭接口异常不能拖垮首页，故单独兜底为 null
+        API.getFamilyStatus().catch(() => null)
       ]);
 
       this.state.overview = overviewData;
@@ -222,21 +225,21 @@ const App = {
       const recentBills = billsData.bills || [];
 
       container.innerHTML = `
-        <div class="page-header"><h1>🏠 米菲记账</h1></div>
+        <div class="page-header"><h1>🏠 米菲记账</h1><button class="home-mine-btn" onclick="window.location.hash='#/mine'" aria-label="我的">👤</button></div>
         <div class="page-content">
           <!-- 月度概览 -->
           <div class="stats-row">
             <div class="stat-card income">
-              <div class="stat-label">本月收入</div>
-              <div class="stat-value">¥${this.formatNum(overview.income)}</div>
+              <div class="stat-label">收入</div>
+              <div class="stat-value">¥${this.formatNum(overview.otherIncome)}</div>
             </div>
             <div class="stat-card expense">
-              <div class="stat-label">本月支出</div>
+              <div class="stat-label">已支出金额</div>
               <div class="stat-value">¥${this.formatNum(overview.expense)}</div>
             </div>
             <div class="stat-card balance">
-              <div class="stat-label">本月结余</div>
-              <div class="stat-value">¥${this.formatNum(overview.balance)}</div>
+              <div class="stat-label">可支配金额</div>
+              <div class="stat-value">¥${this.formatNum(overview.disposable)}</div>
             </div>
           </div>
 
@@ -255,11 +258,14 @@ const App = {
             </button>
           </div>
 
+          <!-- 家庭入口 -->
+          <div class="mt-16">${this.renderFamilyEntry(familyStatus)}</div>
+
           <!-- 资金模块 -->
           <div class="section-title mt-16">
             资金模块 <a href="#/modules" class="see-all">管理 →</a>
           </div>
-          ${modules.length > 0 ? this.sortedModules().map(m => this.renderModuleCard(m)).join('')
+          ${modules.length > 0 ? this.sortedModules().map((m, i) => this.renderModuleCard(m, i, false, false)).join('')
             : `<div class="module-card-empty"><div style="font-size:48px;">📦</div><div class="empty-text">还没有资金模块</div><button class="btn btn-outline btn-sm mt-8" onclick="App.goAddModule()">创建资金模块</button></div>`}
 
           <!-- 最近账单 -->
@@ -275,7 +281,7 @@ const App = {
   },
 
   // ==================== 资金模块卡片 ====================
-  renderModuleCard(m, idx = 0) {
+  renderModuleCard(m, idx = 0, showDel = true, showPeriod = true) {
     const remaining = m.budget_amount - m.spent_amount;
     const progress = m.budget_amount > 0 ? Math.round((m.spent_amount / m.budget_amount) * 1000) / 10 : 0;
     let fillClass = 'ok';
@@ -286,7 +292,7 @@ const App = {
     const moduleEmojis = this.moduleIconList();
     let miffyIcon;
     if (m.icon && m.icon.startsWith('upload:')) {
-      miffyIcon = `<img src="/uploads/${m.icon.replace('upload:','')}" style="width:28px;height:28px;object-fit:contain;border-radius:6px;">`;
+      miffyIcon = `<img src="uploads/${m.icon.replace('upload:','')}" style="width:28px;height:28px;object-fit:contain;border-radius:6px;">`;
     } else if (m.icon && m.icon.startsWith('emoji:')) {
       miffyIcon = `<span style="font-size:28px;">${m.icon.replace('emoji:','')}</span>`;
     } else {
@@ -297,7 +303,10 @@ const App = {
       <div class="module-card" onclick="window.location.hash='#/module-detail?id=${m.id}'">
         <div class="module-card-header">
           <div class="module-card-name"><span class="module-card-icon">${miffyIcon}</span>${this.escapeHtml(m.name)}</div>
-          ${m.period_type !== 'none' ? `<span style="font-size:11px;color:var(--text-light)">${m.period_type === 'weekly' ? '每周' : '每月'}</span>` : ''}
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${showPeriod && m.period_type !== 'none' ? `<span style="font-size:11px;color:var(--primary);background:var(--primary-light);padding:2px 8px;border-radius:10px;">🔄 ${m.period_type === 'weekly' ? '每周重置' : '每月重置'}</span>` : ''}
+            ${showDel ? `<button class="module-del-btn" onclick="event.stopPropagation();App.deleteModule(${m.id})" title="删除模块" aria-label="删除模块">🗑️</button>` : ''}
+          </div>
         </div>
         <div class="module-card-amounts">
           <span class="used">已用 ¥${this.formatNum(m.spent_amount)}</span>
@@ -338,6 +347,293 @@ const App = {
       </div>`;
   },
 
+  // ==================== 家庭（授权后只读共享） ====================
+  async renderFamily() {
+    // 进入页面先停掉可能残留的邀请码倒计时，避免定时器泄漏
+    if (this.state._codeTimer) { clearInterval(this.state._codeTimer); this.state._codeTimer = null; }
+
+    const container = document.getElementById('page-container');
+    container.innerHTML = `<div class="page-header"><h1>👨‍👩‍👧 家庭</h1></div><div class="page-content">${this.loadingHtml()}</div>`;
+
+    try {
+      const status = await API.getFamilyStatus();
+
+      if (!status.bound) {
+        container.innerHTML = `
+          <div class="page-header"><h1>👨‍👩‍👧 家庭</h1></div>
+          <div class="page-content">${this.renderFamilyUnbound(status)}</div>`;
+        return;
+      }
+
+      const y = this.state.currentYear;
+      const m = this.state.currentMonth;
+      const [overview, billsData] = await Promise.all([
+        API.getFamilyOverview(y, m),
+        API.getFamilyBills({ year: y, month: m, page: 1, who: 'all' })
+      ]);
+
+      this.state.family = { status, who: 'all', page: 1 };
+
+      container.innerHTML = `
+        <div class="page-header"><h1>👨‍👩‍👧 家庭</h1></div>
+        <div class="page-content">
+          ${this.renderFamilyCompare(overview)}
+          <div class="section-title mt-16">
+            家庭账单
+            <span style="float:right;font-size:12px;font-weight:400;">
+              <a href="javascript:void(0)" data-family-filter="all" onclick="App.switchFamilyFilter('all')" style="margin-left:10px;color:var(--primary);font-weight:500;text-decoration:none;">全部</a>
+              <a href="javascript:void(0)" data-family-filter="me" onclick="App.switchFamilyFilter('me')" style="margin-left:10px;color:var(--text-secondary);text-decoration:none;">我的</a>
+              <a href="javascript:void(0)" data-family-filter="partner" onclick="App.switchFamilyFilter('partner')" style="margin-left:10px;color:var(--text-secondary);text-decoration:none;">对方的</a>
+            </span>
+          </div>
+          <div id="family-bills">${this.renderFamilyBillList(billsData)}</div>
+          <div class="mt-16" style="text-align:center;">
+            <button class="btn btn-outline btn-sm" onclick="App.confirmUnlinkFamily()">解除家庭关系</button>
+          </div>
+        </div>`;
+    } catch (err) {
+      container.innerHTML = `<div class="page-header"><h1>👨‍👩‍👧 家庭</h1></div><div class="page-content"><p style="text-align:center;padding:40px;color:var(--text-secondary)">加载失败，请刷新重试</p></div>`;
+    }
+  },
+
+  renderFamilyUnbound(status) {
+    return `
+      <div class="empty-state" style="padding:20px 16px;">
+        <div style="font-size:48px;">👨‍👩‍👧</div>
+        <p>还没有建立家庭关系</p>
+        <p style="font-size:12px;color:var(--text-secondary);">建立后双方可互相查看账本（只读，不能修改对方数据）</p>
+      </div>
+
+      <div class="section-title mt-16">绑定家庭关系</div>
+      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">生成邀请码后，把 6 位码告诉对方，他在自己手机的家庭页输入即可互相查看账本。</p>
+      <button class="btn btn-primary" style="width:100%;" onclick="App.generateFamilyCode()">生成我的邀请码</button>
+      <div id="family-code-area" class="mt-8"></div>
+      <div class="mt-8" style="display:flex;gap:8px;">
+        <input type="text" class="form-input" id="family-code-input" placeholder="输入对方的 6 位邀请码" maxlength="6" inputmode="numeric" style="flex:1;">
+        <button class="btn btn-outline" onclick="App.redeemFamilyCode()">绑定</button>
+      </div>`;
+  },
+
+  renderFamilyCompare(ov) {
+    const me = ov.me;
+    const pt = ov.partner;
+    return `
+      <div class="stats-row">
+        <div class="stat-card income">
+          <div class="stat-label">我 · ${this.escapeHtml(me.username)}</div>
+          <div class="stat-value">¥${this.formatNum(me.expense)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);">${me.expenseCount} 笔</div>
+        </div>
+        <div class="stat-card expense">
+          <div class="stat-label">${this.escapeHtml(pt.username)}</div>
+          <div class="stat-value">¥${this.formatNum(pt.expense)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);">${pt.expenseCount} 笔</div>
+        </div>
+        <div class="stat-card balance">
+          <div class="stat-label">两人合计</div>
+          <div class="stat-value">¥${this.formatNum(ov.total.expense)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);">${ov.year} 年 ${ov.month} 月</div>
+        </div>
+      </div>`;
+  },
+
+  renderFamilyBillList(data) {
+    const bills = data.bills || [];
+    if (!bills.length) {
+      return `<div class="empty-state"><div style="font-size:48px;">📝</div><p>这个月还没有账单</p></div>`;
+    }
+    return `
+      ${bills.map(b => this.renderFamilyBillItem(b)).join('')}
+      <div id="family-pagination">${this.renderFamilyPagination(data)}</div>`;
+  },
+
+  renderFamilyBillItem(b) {
+    const isMe = b.owner === 'me';
+    const barColor = isMe ? 'var(--primary)' : '#D85A30';
+    const tagBg = isMe ? 'var(--primary-light)' : '#FAECE7';
+    const tagColor = isMe ? 'var(--primary)' : '#993C1D';
+    return `
+      <div class="bill-item" style="border-left:3px solid ${barColor};">
+        <div class="bill-icon">${b.category_icon || (b.type === 'income' ? '💰' : '📌')}</div>
+        <div class="bill-info">
+          <div class="bill-category">
+            ${this.escapeHtml(b.category_name || '未知分类')}
+            <span style="font-size:11px;padding:1px 6px;border-radius:8px;margin-left:6px;background:${tagBg};color:${tagColor};">
+              ${this.escapeHtml(b.owner_name)}
+            </span>
+          </div>
+          <div class="bill-meta">
+            <span>${b.date}</span>
+            ${b.remark ? `<span>${this.escapeHtml(b.remark)}</span>` : ''}
+          </div>
+        </div>
+        <div class="bill-amount ${b.type}">
+          ${b.type === 'income' ? '+' : '-'}¥${this.formatNum(b.amount)}
+        </div>
+      </div>`;
+  },
+
+  renderFamilyPagination(data) {
+    const p = data.page || 1;
+    const tp = data.totalPages || 1;
+    if (tp <= 1) return '';
+    return `
+      <div style="display:flex;justify-content:center;align-items:center;gap:12px;padding:12px 0;">
+        <button class="btn btn-outline btn-sm" ${p <= 1 ? 'disabled' : ''} onclick="App.loadFamilyPage(${p - 1})">上一页</button>
+        <span style="font-size:12px;color:var(--text-secondary);">${p} / ${tp}</span>
+        <button class="btn btn-outline btn-sm" ${p >= tp ? 'disabled' : ''} onclick="App.loadFamilyPage(${p + 1})">下一页</button>
+      </div>`;
+  },
+
+  async loadFamilyPage(page) {
+    const f = this.state.family;
+    if (!f) return;
+    try {
+      const data = await API.getFamilyBills({
+        year: this.state.currentYear,
+        month: this.state.currentMonth,
+        who: f.who,
+        page
+      });
+      const box = document.getElementById('family-bills');
+      if (box) box.innerHTML = this.renderFamilyBillList(data);
+    } catch (err) {
+      this.toast('加载失败');
+    }
+  },
+
+  async switchFamilyFilter(who) {
+    if (!this.state.family) this.state.family = {};
+    this.state.family.who = who;
+    try {
+      const data = await API.getFamilyBills({
+        year: this.state.currentYear,
+        month: this.state.currentMonth,
+        who,
+        page: 1
+      });
+      const box = document.getElementById('family-bills');
+      if (box) box.innerHTML = this.renderFamilyBillList(data);
+      document.querySelectorAll('[data-family-filter]').forEach(el => {
+        const hit = el.getAttribute('data-family-filter') === who;
+        el.style.color = hit ? 'var(--primary)' : 'var(--text-secondary)';
+        el.style.fontWeight = hit ? '500' : '400';
+      });
+    } catch (err) {
+      this.toast('加载失败');
+    }
+  },
+
+  // 生成 6 位邀请码并展示
+  async generateFamilyCode() {
+    try {
+      const res = await API.generateFamilyCode();
+      const area = document.getElementById('family-code-area');
+      if (area) {
+        area.innerHTML = `
+          <div style="text-align:center;padding:16px;background:var(--primary-light);border-radius:12px;">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">把这串码告诉对方，让他到自己手机的家庭页输入</div>
+            <div style="font-size:32px;font-weight:500;letter-spacing:8px;color:var(--primary);">${String(res.code)}</div>
+            <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="App.copyFamilyCode('${String(res.code)}')">📋 复制邀请码</button>
+            <div id="family-code-countdown" style="font-size:12px;color:var(--text-secondary);margin-top:8px;"></div>
+          </div>`;
+      }
+      this.startFamilyCodeCountdown(Date.now() + (res.expiresInMinutes || 10) * 60 * 1000);
+    } catch (err) {
+      this.toast(err.message);
+    }
+  },
+
+  // 邀请码倒计时（页面切换时由 renderFamily 统一清理）
+  startFamilyCodeCountdown(expiresAtMs) {
+    if (this.state._codeTimer) clearInterval(this.state._codeTimer);
+    const tick = () => {
+      const node = document.getElementById('family-code-countdown');
+      if (!node) {
+        clearInterval(this.state._codeTimer);
+        this.state._codeTimer = null;
+        return;
+      }
+      const left = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+      if (left <= 0) {
+        node.textContent = '已过期，请重新生成';
+        clearInterval(this.state._codeTimer);
+        this.state._codeTimer = null;
+        return;
+      }
+      const mm = String(Math.floor(left / 60)).padStart(2, '0');
+      const ss = String(left % 60).padStart(2, '0');
+      node.textContent = mm + ':' + ss + ' 后失效';
+    };
+    tick();
+    this.state._codeTimer = setInterval(tick, 1000);
+  },
+
+  // 用对方的邀请码完成绑定
+  async redeemFamilyCode() {
+    const input = document.getElementById('family-code-input');
+    const code = (input && input.value ? input.value : '').trim();
+    if (!/^\d{6}$/.test(code)) { this.toast('请输入 6 位数字邀请码'); return; }
+    try {
+      const res = await API.redeemFamilyCode(code);
+      this.toast(res.message || '绑定成功');
+      this.renderFamily();
+    } catch (err) {
+      this.toast(err.message);
+    }
+  },
+
+  // 复制邀请码（优先用 clipboard API，失败降级到 execCommand）
+  copyFamilyCode(code) {
+    const done = () => this.toast('邀请码已复制');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done).catch(() => this.fallbackCopy(code, done));
+    } else {
+      this.fallbackCopy(code, done);
+    }
+  },
+
+  fallbackCopy(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* 忽略 */ }
+    document.body.removeChild(ta);
+    if (cb) cb();
+  },
+
+  async confirmUnlinkFamily() {
+    if (!confirm('确定解除家庭关系吗？解除后双方将无法再查看对方的账本。')) return;
+    try {
+      const res = await API.unlinkFamily();
+      this.toast(res.message || '已解除家庭关系');
+      this.renderFamily();
+    } catch (err) {
+      this.toast(err.message);
+    }
+  },
+
+  // 首页的家庭入口卡片
+  renderFamilyEntry(status) {
+    const bound = status && status.bound;
+    const pending = status && status.incoming ? status.incoming.length : 0;
+    const desc = bound
+      ? `${this.escapeHtml(status.partner.username)} 与你互相可见 · 查看 →`
+      : (pending ? `有 ${pending} 个待处理邀请 · 去处理 →` : '邀请对方互相查看账本 →');
+    return `
+      <div class="module-card" style="cursor:pointer;" onclick="window.location.hash='#/family'">
+        <div class="module-card-header">
+          <div class="module-card-name"><span class="module-card-icon">👨‍👩‍👧</span>家庭</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${desc}</div>
+      </div>`;
+  },
+
   // ==================== 快速记账 ====================
   goAdd(type) {
     if (this.state.isDesktop) {
@@ -353,7 +649,7 @@ const App = {
     const billType = params.get('type') || 'expense';
     const today = new Date().toISOString().split('T')[0];
 
-    container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/home" class="back-btn">←</a></div><h1>记账</h1><div></div></div><div class="page-content"><div class="loading">加载中...</div></div>`;
+    container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/home" class="back-btn">←</a></div><h1>记账</h1><div></div></div><div class="page-content">${this.loadingHtml()}</div>`;
 
     try {
       const [catData, modData] = await Promise.all([
@@ -512,7 +808,7 @@ const App = {
       const modEmojis = this.moduleIconList();
       let pickerIconHtml;
       if (m.icon && m.icon.startsWith('upload:')) {
-        pickerIconHtml = `<img src="/uploads/${m.icon.replace('upload:','')}" style="width:28px;height:28px;object-fit:contain;border-radius:6px;">`;
+        pickerIconHtml = `<img src="uploads/${m.icon.replace('upload:','')}" style="width:28px;height:28px;object-fit:contain;border-radius:6px;">`;
       } else if (m.icon && m.icon.startsWith('emoji:')) {
         pickerIconHtml = `<span style="font-size:28px;">${m.icon.replace('emoji:','')}</span>`;
       } else {
@@ -636,7 +932,7 @@ const App = {
   // ==================== 账单列表 ====================
   async renderBills() {
     const container = document.getElementById('page-container');
-    container.innerHTML = `<div class="page-header"><h1>📋 账单</h1></div><div class="page-content"><div class="loading">加载中...</div></div>`;
+    container.innerHTML = `<div class="page-header"><h1>📋 账单</h1></div><div class="page-content">${this.loadingHtml()}</div>`;
 
     try {
       const bills = await API.getBills({ limit: 50 });
@@ -654,7 +950,9 @@ const App = {
           <div id="bills-list">
             ${bills.bills.length > 0 ? bills.bills.map(b => this.renderBillItem(b)).join('') : `<div class="empty-state"><div style="font-size:48px;">📝</div><p>还没有账单记录</p></div>`}
           </div>
-          ${bills.total > 50 ? this.renderPagination(bills.page, Math.ceil(bills.total / 50)) : ''}
+          <div id="bills-pagination">
+            ${bills.total > 50 ? this.renderPagination(bills.page, Math.ceil(bills.total / 50)) : ''}
+          </div>
         </div>`;
       this.state._allBills = bills.bills;
       this.state._billsFilter = 'all';
@@ -688,6 +986,13 @@ const App = {
         listEl.innerHTML = data.bills.length > 0
           ? data.bills.map(b => this.renderBillItem(b)).join('')
           : `<div class="empty-state"><div style="font-size:48px;">📝</div><p>没有找到账单</p></div>`;
+      }
+
+      const pagEl = document.getElementById('bills-pagination');
+      if (pagEl) {
+        pagEl.innerHTML = data.total > 50
+          ? this.renderPagination(data.page, Math.ceil(data.total / 50))
+          : '';
       }
     } catch (err) {
       this.toast('加载失败');
@@ -740,6 +1045,30 @@ const App = {
     } catch (err) {
       this.toast(err.message);
     }
+  },
+
+  loadingHtml() {
+    const imgs = [
+      '<img src="./images/miffy-cup.png" alt="米菲喝茶">',
+      '<img src="./images/miffy-wallet.jpg" alt="米菲拿钱包">',
+      '<img src="./images/miffy-logo.jpg" alt="米菲">',
+      '<img src="./images/miffy-celebrate.jpg" alt="米菲庆祝">'
+    ];
+    const texts = [
+      '米菲正在帮你翻找小账本，稍等一下下哦 🐰',
+      '别着急，小兔子正在认真数钱呢～',
+      '马上就好啦，喝口水的功夫 🌸',
+      '米菲在记账中，请温柔地等待 💛',
+      '数据坐小火车来的路上，马上到～',
+      '乖乖等一下，米菲不会让你久等的'
+    ];
+    const img = imgs[Math.floor(Math.random() * imgs.length)];
+    const txt = texts[Math.floor(Math.random() * texts.length)];
+    return `
+      <div class="miffy-loading">
+        <div class="miffy-loading-imgwrap">${img}</div>
+        <div class="miffy-loading-text">${txt}</div>
+      </div>`;
   },
 
   async editBill(id) {
@@ -825,7 +1154,7 @@ const App = {
   // ==================== 资金模块 ====================
   async renderModules() {
     const container = document.getElementById('page-container');
-    container.innerHTML = `<div class="page-header"><h1>📦 资金模块</h1></div><div class="page-content"><div class="loading">⏳ 加载中...</div></div>`;
+    container.innerHTML = `<div class="page-header"><h1>📦 资金模块</h1></div><div class="page-content">${this.loadingHtml()}</div>`;
 
     try {
       const modData = await API.getModules();
@@ -877,7 +1206,7 @@ const App = {
             </label>
             ${mod && mod.icon && (mod.icon.startsWith('data:') || mod.icon.startsWith('upload:')) ? `
             <span class="mod-icon-option selected" style="padding:2px;border-radius:8px;background:var(--primary-light);position:relative;" onclick="App.selectModuleIcon('${mod.icon}')">
-              <img src="${mod.icon.startsWith('upload:') ? '/uploads/' + mod.icon.replace('upload:','') : mod.icon}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;display:block;">
+              <img src="${mod.icon.startsWith('upload:') ? 'uploads/' + mod.icon.replace('upload:','') : mod.icon}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;display:block;">
             </span>` : ''}
           </div>
         </div>
@@ -993,12 +1322,16 @@ const App = {
   },
 
   async deleteModule(id) {
-    if (!confirm('确定要删除这个资金模块吗？')) return;
+    if (!confirm('确定要删除这个资金模块吗？删除后相关数据将一并清除。')) return;
     try {
       await API.deleteModule(id);
-      this.toast('模块已删除');
+      this.toast('模块已删除 🐰');
       closeModal();
-      this.renderModules();
+      if (window.location.hash.startsWith('#/module-detail')) {
+        window.location.hash = '#/modules';
+      } else {
+        this.renderModules();
+      }
     } catch (err) {
       this.toast(err.message);
     }
@@ -1010,7 +1343,7 @@ const App = {
     if (!id) { window.location.hash = '#/modules'; return; }
 
     const container = document.getElementById('page-container');
-    container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/modules" class="back-btn">←</a></div><h1>模块详情</h1><div></div></div><div class="page-content"><div class="loading">加载中...</div></div>`;
+    container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/modules" class="back-btn">←</a></div><h1>模块详情</h1><div></div></div><div class="page-content">${this.loadingHtml()}</div>`;
 
     try {
       const [modData, billsData] = await Promise.all([
@@ -1027,11 +1360,12 @@ const App = {
           <div class="page-header-left"><a href="#/modules" class="back-btn">←</a></div>
           <h1>模块详情</h1>
           <button class="btn btn-outline btn-xs" onclick="App.goAddModule(${m.id})">编辑</button>
+          <button class="btn btn-danger btn-xs" onclick="App.deleteModule(${m.id})">删除</button>
         </div>
         <div class="page-content">
           <div class="card" style="text-align:center;padding:24px;">
             <div style="width:96px;height:96px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;">${(() => {
-              if (m.icon && m.icon.startsWith('upload:')) return `<img src="/uploads/${m.icon.replace('upload:','')}" style="width:80px;height:80px;object-fit:contain;border-radius:12px;">`;
+              if (m.icon && m.icon.startsWith('upload:')) return `<img src="uploads/${m.icon.replace('upload:','')}" style="width:80px;height:80px;object-fit:contain;border-radius:12px;">`;
               if (m.icon && m.icon.startsWith('emoji:')) return m.icon.replace('emoji:','');
               return '📦';
             })()}</div>
@@ -1071,7 +1405,7 @@ const App = {
     const y = this.state.statsYear;
     const m = this.state.statsMonth;
     container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/home" class="back-btn">←</a></div><h1>📊 统计</h1><div></div></div>
-      <div class="page-content"><div class="loading">加载中...</div></div>`;
+      <div class="page-content">${this.loadingHtml()}</div>`;
     try {
       if (dim === 'year') await this._renderStatsYear(container, y);
       else if (dim === 'month') await this._renderStatsMonth(container, y, m);
@@ -1117,9 +1451,7 @@ const App = {
         var fg = i < 3 ? '#fff' : 'var(--text-secondary)';
         topExpHtml += '<div class="rank-item" onclick="App.showCategoryBills(' + c.id + ',\'' + self.escapeHtml(c.name) + '\')">'
           + '<span class="rank-index" style="background:' + bg + ';color:' + fg + '">' + (i+1) + '</span>'
-          + '<span class="rank-icon">' + (c.icon || '📝') + '</span>'
           + '<span class="rank-name">' + self.escapeHtml(c.name) + '</span>'
-          + '<span class="rank-bar-wrap"><span class="rank-bar" style="width:' + (c.percent || 0) + '%;background:' + self.chartColor(i) + '"></span></span>'
           + '<span class="rank-amount">¥' + self.formatNum(c.total || 0) + '</span>'
           + '<span class="rank-pct">' + (c.percent || 0) + '%</span></div>';
       });
@@ -1136,9 +1468,7 @@ const App = {
         var fg = i < 3 ? '#fff' : 'var(--text-secondary)';
         topIncHtml += '<div class="rank-item">'
           + '<span class="rank-index" style="background:' + bg + ';color:' + fg + '">' + (i+1) + '</span>'
-          + '<span class="rank-icon">' + (c.icon || '💰') + '</span>'
           + '<span class="rank-name">' + self.escapeHtml(c.name) + '</span>'
-          + '<span class="rank-bar-wrap"><span class="rank-bar income-bar" style="width:' + (c.percent || 0) + '%"></span></span>'
           + '<span class="rank-amount" style="color:var(--accent-green)">¥' + self.formatNum(c.total || 0) + '</span>'
           + '<span class="rank-pct">' + (c.percent || 0) + '%</span></div>';
       });
@@ -1148,7 +1478,7 @@ const App = {
     }
 
     container.innerHTML =
-      '<div class="page-header">'
+      '<div class="page-header stats-header">'
         + '<div class="page-header-left"><a href="#/home" class="back-btn">←</a></div>'
         + '<h1>📊 统计</h1>'
         + '<div style="display:flex;align-items:center;gap:8px;">'
@@ -1163,13 +1493,14 @@ const App = {
         + '<button class="filter-chip ' + (self.state.statsDim==='day'?'active':'') + '" onclick="App.switchStatsDim(\'day\')">📌 日度</button>'
       + '</div>'
       + '<div class="page-content">'
-        + '<div class="stats-row">'
+        + '<div class="stats-row stats-page">'
           + '<div class="stat-card income"><div class="stat-label">全年收入</div><div class="stat-value">¥' + self.formatNum(data.totalIncome || 0) + '</div></div>'
           + '<div class="stat-card expense"><div class="stat-label">全年支出</div><div class="stat-value">¥' + self.formatNum(data.totalExpense || 0) + '</div></div>'
           + '<div class="stat-card balance"><div class="stat-label">全年结余</div><div class="stat-value">' + ((data.balance||0)>=0?'':'-') + '¥' + self.formatNum(Math.abs(data.balance||0)) + '</div></div>'
           + '<div class="stat-card" style="background:var(--bg-card);border-radius:12px;padding:12px;"><div class="stat-label">记账笔数</div><div class="stat-value" style="font-size:18px;">' + (data.totalCount || 0) + ' 笔</div></div>'
         + '</div>'
         + '<div class="chart-section"><div class="chart-title">月度收支趋势</div>' + chartHtml + '</div>'
+        + '<div class="chart-section"><div class="chart-title">收支趋势（折线）</div>' + self.buildYearLineChart(data.monthlyData) + '</div>'
         + '<div class="chart-section"><div class="chart-title">年度支出 TOP 分类</div>' + topExpHtml + '</div>'
         + '<div class="chart-section"><div class="chart-title">年度收入 TOP 分类</div>' + topIncHtml + '</div>'
       + '</div>';
@@ -1177,13 +1508,40 @@ const App = {
 
   // ---- 月度视图渲染（增强版） ----
   async _renderStatsMonth(container, year, month) {
-    const [overview, daily, catExp, catInc, modStats] = await Promise.all([
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const [overview, daily, catExp, catInc, modStats, prevOverview] = await Promise.all([
       API.getStatsOverview(year, month), API.getDailyStats(year, month),
       API.getCategoryExpenseStats(year, month), API.getCategoryIncomeStats(year, month),
-      API.getModuleStats(year, month)
+      API.getModuleStats(year, month),
+      API.getStatsOverview(prevYear, prevMonth)
     ]);
+
+    const selfCmp = this;
+    const cmpRow = function(label, curV, prevV, goodWhenUp) {
+      const diff = (curV || 0) - (prevV || 0);
+      const eq = diff === 0;
+      const up = diff > 0;
+      const pct = (prevV && prevV !== 0) ? Math.round(Math.abs(diff) / Math.abs(prevV) * 100) : (diff !== 0 ? 100 : 0);
+      const good = eq ? true : (up === goodWhenUp);
+      const cls = eq ? 'flat' : (good ? 'good' : 'bad');
+      const arrow = eq ? '—' : (up ? '▲' : '▼');
+      return '<div class="mc-row">'
+        + '<span class="mc-label">' + label + '</span>'
+        + '<span class="mc-cur">¥' + selfCmp.formatNum(curV || 0) + '</span>'
+        + '<span class="mc-prev">上月 ¥' + selfCmp.formatNum(prevV || 0) + '</span>'
+        + '<span class="mc-delta ' + cls + '">' + arrow + (eq ? '' : ' ' + Math.abs(pct) + '%') + '</span>'
+        + '</div>';
+    };
+    const monthCompareHtml = '<div class="chart-section month-compare">'
+      + '<div class="chart-title">📊 月度对比（' + prevYear + '年' + prevMonth + '月 → ' + year + '年' + month + '月）</div>'
+      + cmpRow('收入', overview.income, prevOverview && prevOverview.income, true)
+      + cmpRow('支出', overview.expense, prevOverview && prevOverview.expense, false)
+      + cmpRow('结余', overview.balance, prevOverview && prevOverview.balance, true)
+      + '</div>';
+
     container.innerHTML = `
-      <div class="page-header">
+      <div class="page-header stats-header">
         <div class="page-header-left"><a href="#/home" class="back-btn">←</a></div>
         <h1>📊 统计</h1>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1198,12 +1556,14 @@ const App = {
         <button class="filter-chip ${this.state.statsDim==='day'?'active':''}" onclick="App.switchStatsDim('day')">📌 日度</button>
       </div>
       <div class="page-content">
-        <div class="stats-row">
+        ${monthCompareHtml}
+        <div class="stats-row stats-page">
           <div class="stat-card income"><div class="stat-label">收入</div><div class="stat-value">¥${this.formatNum(overview.income)}</div></div>
           <div class="stat-card expense"><div class="stat-label">支出</div><div class="stat-value">¥${this.formatNum(overview.expense)}</div></div>
           <div class="stat-card balance"><div class="stat-label">结余</div><div class="stat-value">¥${this.formatNum(overview.balance)}</div></div>
         </div>
         ${overview.compareRatio !== 0 ? `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">较上月 ${overview.compareRatio > 0 ? '<span class=\"compare-badge up\">📈 +' + overview.compareRatio + '%' : '<span class=\"compare-badge down\">📉 ' + overview.compareRatio + '%'}` : ''}
+        <div class="stats-charts-grid">
         <div class="chart-section"><div class="chart-title">每日收支趋势</div>${this.buildDualLineChart(daily.dailyData, daily.dailyIncome || [], year, month)}</div>
         <div class="chart-section">
           <div class="chart-title">支出分类占比</div>
@@ -1219,7 +1579,8 @@ const App = {
         </div>
         <div class="chart-section">
           <div class="chart-title">资金模块使用情况</div>
-          ${modStats.moduleData.length ? modStats.moduleData.map(m => { const me=this.moduleIconList(); let ih; if(m.icon&&m.icon.startsWith('upload:')) ih=`<img src=\"/uploads/${m.icon.replace('upload:')}\" style=\"width:20px;height:20px;object-fit:contain;border-radius:4px;\">`; else if(m.icon&&m.icon.startsWith('emoji:')) ih=`<span style=\"font-size:20px;\">${m.icon.replace('emoji:','')}</span>`; else ih=`<span style=\"font-size:20px;\">${me[(m.id||0)%me.length]}</span>`; const cl=m.progress>80?'danger':m.progress>60?'warning':'ok'; const rem=m.budget_amount-m.total_spent; return `<div class=\"module-ring-row\"><div class=\"module-ring\">${this.buildRingChart(m.progress,cl)}</div><div class=\"module-ring-info\"><div class=\"module-ring-name\">${ih} ${this.escapeHtml(m.name)}</div><div class=\"module-ring-amount\">¥${this.formatNum(m.total_spent)} / ¥${this.formatNum(m.budget_amount)}</div><div class=\"module-ring-remaining ${rem<0?'danger':'ok'}\">${rem<0?'已超支 ¥'+this.formatNum(-rem):'剩余 ¥'+this.formatNum(rem)}</div></div></div>`; }).join('') : '<p style="text-align:center;color:var(--text-light);">暂无资金模块</p>'}
+          ${modStats.moduleData.length ? modStats.moduleData.map(m => { const me=this.moduleIconList(); let ih; if(m.icon&&m.icon.startsWith('upload:')) ih=`<img src=\"uploads/${m.icon.replace('upload:')}\" style=\"width:20px;height:20px;object-fit:contain;border-radius:4px;\">`; else if(m.icon&&m.icon.startsWith('emoji:')) ih=`<span style=\"font-size:20px;\">${m.icon.replace('emoji:','')}</span>`; else ih=`<span style=\"font-size:20px;\">${me[(m.id||0)%me.length]}</span>`; const cl=m.progress>80?'danger':m.progress>60?'warning':'ok'; const rem=m.budget_amount-m.total_spent; return `<div class=\"module-ring-row\"><div class=\"module-ring\">${this.buildRingChart(m.progress,cl)}</div><div class=\"module-ring-info\"><div class=\"module-ring-name\">${ih} ${this.escapeHtml(m.name)}</div><div class=\"module-ring-amount\">¥${this.formatNum(m.total_spent)} / ¥${this.formatNum(m.budget_amount)}</div><div class=\"module-ring-remaining ${rem<0?'danger':'ok'}\">${rem<0?'已超支 ¥'+this.formatNum(-rem):'剩余 ¥'+this.formatNum(rem)}</div></div></div>`; }).join('') : '<p style="text-align:center;color:var(--text-light);">暂无资金模块</p>'}
+        </div>
         </div>
       </div>`;
   },
@@ -1276,7 +1637,7 @@ const App = {
     var emptyTip = dayBills.length === 0 ? '<p style="text-align:center;color:var(--text-light);padding:32px;">当天暂无记账记录</p>' : '';
 
     container.innerHTML =
-      '<div class="page-header">'
+      '<div class="page-header stats-header">'
         + '<div class="page-header-left"><a href="#/home" class="back-btn">←</a></div>'
         + '<h1>📊 统计</h1>'
         + '<div style="display:flex;align-items:center;gap:6px;">'
@@ -1289,7 +1650,7 @@ const App = {
         + '<button class="filter-chip ' + (this.state.statsDim==='day'?'active':'') + '" onclick="App.switchStatsDim(\'day\')">📌 日度</button>'
       + '</div>'
       + '<div class="page-content">'
-        + '<div class="stats-row">'
+        + '<div class="stats-row stats-page">'
           + '<div class="stat-card income"><div class="stat-label">当日收入</div><div class="stat-value">¥' + this.formatNum(dInc) + '</div><div style="font-size:11px;color:var(--text-light);margin-top:2px;">' + incB.length + ' 笔</div></div>'
           + '<div class="stat-card expense"><div class="stat-label">当日支出</div><div class="stat-value">¥' + this.formatNum(dExp) + '</div><div style="font-size:11px;color:var(--text-light);margin-top:2px;">' + expB.length + ' 笔</div></div>'
           + '<div class="stat-card balance"><div class="stat-label">当日结余</div><div class="stat-value">' + (dInc-dExp>=0?'':'-') + '¥' + this.formatNum(Math.abs(dInc-dExp)) + '</div></div>'
@@ -1448,6 +1809,50 @@ const App = {
       + '</svg>';
   },
 
+  // 年度收支趋势折线图（12个月 收入+支出双折线）
+  buildYearLineChart(monthlyData) {
+    if (!monthlyData || monthlyData.length === 0) return '<p style="text-align:center;color:var(--text-light);padding:24px;">暂无数据</p>';
+    var months = 12;
+    var incVals = [], expVals = [];
+    for (var i = 0; i < months; i++) { var d = monthlyData[i] || {}; incVals.push(d.income || 0); expVals.push(d.expense || 0); }
+    var W = 700, H = 200, padL = 30, padR = 12, padT = 18, padB = 26;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var maxV = Math.max.apply(null, incVals.concat(expVals).concat([1]));
+    var xAt = function(i) { return padL + i * (plotW / (months - 1)); };
+    var yAt = function(v) { return padT + (1 - v / maxV) * plotH; };
+    var mkPath = function(vals) {
+      var pts = [];
+      for (var pi = 0; pi < vals.length; pi++) pts.push(xAt(pi).toFixed(1) + ' ' + yAt(vals[pi]).toFixed(1));
+      return 'M ' + pts.join(' L ');
+    };
+    var mkArea = function(vals, color) {
+      var p = 'M ' + xAt(0).toFixed(1) + ' ' + (padT + plotH).toFixed(1) + ' ';
+      for (var ai = 0; ai < vals.length; ai++) p += 'L ' + xAt(ai).toFixed(1) + ' ' + yAt(vals[ai]).toFixed(1) + ' ';
+      p += 'L ' + xAt(months - 1).toFixed(1) + ' ' + (padT + plotH).toFixed(1) + ' Z';
+      return '<path d="' + p + '" fill="' + color + '" opacity="0.1"></path>';
+    };
+    var dots = function(vals, color) {
+      var html = '';
+      for (var di = 0; di < vals.length; di++) html += '<circle cx="' + xAt(di).toFixed(1) + '" cy="' + yAt(vals[di]).toFixed(1) + '" r="2" fill="#fff" stroke="' + color + '" stroke-width="1.5"></circle>';
+      return html;
+    };
+    var labelHtml = '';
+    [1, 3, 5, 7, 9, 11, 12].forEach(function(mn) {
+      labelHtml += '<text x="' + xAt(mn - 1).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="9" fill="var(--text-light)">' + mn + '月</text>';
+    });
+    return '<svg class="line-chart-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">'
+      + mkArea(expVals, 'var(--primary)')
+      + mkArea(incVals, 'var(--accent-green)')
+      + '<path d="' + mkPath(expVals) + '" fill="none" stroke="var(--primary)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"></path>'
+      + '<path d="' + mkPath(incVals) + '" fill="none" stroke="var(--accent-green)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"></path>'
+      + dots(expVals, 'var(--primary)')
+      + dots(incVals, 'var(--accent-green)')
+      + labelHtml
+      + '<g transform="translate(' + (W - 70) + ', 8)"><rect x="-30" y="-8" width="60" height="14" rx="3" fill="var(--primary)" opacity="0.12"></rect><text x="0" y="3" text-anchor="middle" font-size="9" fill="var(--primary)">— 支出</text></g>'
+      + '<g transform="translate(' + (W - 70) + ', 22)"><rect x="-30" y="-8" width="60" height="14" rx="3" fill="var(--accent-green)" opacity="0.12"></rect><text x="0" y="3" text-anchor="middle" font-size="9" fill="var(--accent-green)">— 收入</text></g>'
+      + '</svg>';
+  },
+
   // 每日收支双线图
   buildDualLineChart(dailyExpense, dailyIncome, year, month) {
     var endDay = new Date(year, month, 0).getDate();
@@ -1523,9 +1928,9 @@ const App = {
   // ==================== 我的页面 ====================
   renderMine() {
     const container = document.getElementById('page-container');
-    const avatarUrl = this.state.user.avatar ? `/uploads/${this.state.user.avatar}` : '/images/miffy-logo.jpg';
+    const avatarUrl = this.state.user.avatar ? `uploads/${this.state.user.avatar}` : 'images/miffy-logo.jpg';
     container.innerHTML = `
-      <div class="page-header"><h1>👤 我的</h1></div>
+      <div class="page-header"><div class="page-header-left"><a href="#/home" class="back-btn">←</a></div><h1>👤 我的</h1><div></div></div>
       <div class="page-content">
         <div class="card" style="text-align:center;padding:24px;position:relative;overflow:hidden;">
           <div class="avatar-wrapper" onclick="document.getElementById('avatar-upload-input').click()">
@@ -1632,7 +2037,7 @@ const App = {
   // ==================== 分类管理 ====================
   async renderCategoryManage() {
     const container = document.getElementById('page-container');
-    container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/mine" class="back-btn">←</a></div><h1>分类管理</h1><div></div></div><div class="page-content"><div class="loading">加载中...</div></div>`;
+    container.innerHTML = `<div class="page-header"><div class="page-header-left"><a href="#/mine" class="back-btn">←</a></div><h1>分类管理</h1><div></div></div><div class="page-content">${this.loadingHtml()}</div>`;
 
     try {
       const [expData, incData] = await Promise.all([
@@ -2100,7 +2505,7 @@ const App = {
     overlay.innerHTML = `
       <div class="glow-ring"></div>
       <div class="confetti-container" id="celebrate-particles"></div>
-      <div class="miffy-img-wrap"><img class="miffy-img" src="/images/miffy-celebrate.jpg" alt="米菲庆祝"></div>
+      <div class="miffy-img-wrap"><img class="miffy-img" src="images/miffy-celebrate.jpg" alt="米菲庆祝"></div>
       <div class="success-badge"><span class="check-icon">✓</span> 记账成功</div>
       <div class="sub-text">米菲为你开心 🎈</div>`;
     document.body.appendChild(overlay);

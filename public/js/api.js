@@ -1,6 +1,6 @@
 // ==================== API 客户端 ====================
 const API = {
-  baseURL: '/api',
+  baseURL: '/mifei-charge/api',
   token: localStorage.getItem('miffy_token') || '',
 
   setToken(token) {
@@ -90,4 +90,15 @@ const API = {
   getCategoryIncomeStats(year, month) { return this.request('GET', `/stats/category-income?year=${year}&month=${month}`); },
   getModuleStats(year, month) { return this.request('GET', `/stats/modules?year=${year}&month=${month}`); },
   getYearlyStats(year) { return this.request('GET', `/stats/yearly?year=${year}`); },
+
+  // Family（家庭共享 · 只读）
+  getFamilyStatus() { return this.request('GET', '/family/status'); },
+  unlinkFamily() { return this.request('DELETE', '/family/unlink'); },
+  getFamilyOverview(year, month) { return this.request('GET', `/family/overview?year=${year}&month=${month}`); },
+  getFamilyBills(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request('GET', `/family/bills?${qs}`);
+  },
+  generateFamilyCode() { return this.request('POST', '/family/generate-code'); },
+  redeemFamilyCode(code) { return this.request('POST', '/family/redeem-code', { code }); },
 };

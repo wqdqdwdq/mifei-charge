@@ -179,6 +179,7 @@ body {
 .back-btn {
   font-size: 26px; line-height: 1; padding: 6px 10px; margin-left: -8px;
   cursor: pointer; border: none; background: none; color: var(--primary-dark);
+  text-decoration: none;
   border-radius: 12px; transition: background 0.15s, transform 0.1s; -webkit-tap-highlight-color: transparent;
 }
 .back-btn:active { background: var(--primary-light); transform: scale(0.92); }
@@ -232,6 +233,9 @@ body {
 .module-card:active { transform: scale(0.99); }
 .module-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .module-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.module-del-btn { background: transparent; border: none; font-size: 16px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: background 0.15s, transform 0.15s; flex-shrink: 0; }
+.module-del-btn:hover { background: rgba(255,77,79,0.12); transform: scale(1.1); }
+.module-del-btn:active { transform: scale(0.92); }
 .module-card-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .module-card-icon svg { width: 40px; height: 52px; }
 .module-card-amounts { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
@@ -552,6 +556,26 @@ body {
   font-size: 10px;
 }
 
+/* 首页右上角"我的"入口 */
+.home-mine-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--bg-secondary);
+  font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: transform 0.15s;
+}
+.home-mine-btn:active { transform: scale(0.92); }
+
+/* 月度对比区块 */
+.month-compare .mc-row { display: flex; align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.month-compare .mc-row:last-child { border-bottom: none; }
+.month-compare .mc-label { flex: 1; font-weight: 600; }
+.month-compare .mc-cur { min-width: 92px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.month-compare .mc-prev { min-width: 92px; text-align: right; color: var(--text-light); font-size: 11px; font-variant-numeric: tabular-nums; }
+.month-compare .mc-delta { min-width: 66px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.month-compare .mc-delta.good { color: var(--accent-green); }
+.month-compare .mc-delta.bad { color: var(--danger); }
+.month-compare .mc-delta.flat { color: var(--text-light); }
+
 /* ==================== 账单详情弹窗 ==================== */
 .bill-detail-info { padding: 16px 0; }
 .bill-detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
@@ -802,16 +826,12 @@ body {
 
 /* 排行榜样式 */
 .rank-list { display:flex; flex-direction:column; gap:8px; }
-.rank-item { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg-secondary); border-radius:10px; cursor:pointer; transition:transform 0.15s; }
+.rank-item { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-secondary); border-radius:10px; cursor:pointer; transition:transform 0.15s; }
 .rank-item:active { transform:scale(0.98); }
 .rank-index { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
-.rank-icon { font-size:20px; flex-shrink:0; }
 .rank-name { flex:1; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rank-bar-wrap { width:80px; height:6px; background:var(--border); border-radius:3px; overflow:hidden; flex-shrink:0; }
-.rank-bar { height:100%; border-radius:3px; transition:width 0.3s; }
-.income-bar { background:var(--accent-green) !important; }
-.rank-amount { font-size:13px; font-weight:600; min-width:60px; text-align:right; flex-shrink:0; }
-.rank-pct { font-size:11px; color:var(--text-light); min-width:32px; text-align:right; flex-shrink:0; }
+.rank-amount { font-size:13px; font-weight:600; min-width:74px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
+.rank-pct { font-size:11px; color:var(--text-light); min-width:38px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
 
 /* 日历热力 */
 .day-calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; padding:8px; background:var(--bg-secondary); border-radius:12px; }
@@ -827,3 +847,132 @@ body {
 
 /* 日度账单列表 */
 .day-bill-list { display:flex; flex-direction:column; gap:4px; }
+
+/* ==================== 米菲加载页 ==================== */
+.miffy-loading {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 56vh;
+  padding: 48px 24px;
+  overflow: hidden;
+  text-align: center;
+}
+.miffy-loading-bg {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.05;
+  pointer-events: none;
+}
+.miffy-loading-imgwrap {
+  width: 150px; height: 150px;
+  display: flex; align-items: center; justify-content: center;
+  background: #FFF6EC;
+  border-radius: 30px;
+  box-shadow: 0 10px 28px rgba(255, 123, 62, 0.18);
+  animation: miffy-bounce 1.6s ease-in-out infinite;
+  z-index: 1;
+}
+.miffy-loading-imgwrap img,
+.miffy-loading-imgwrap svg {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  border-radius: 26px;
+}
+.miffy-loading-text {
+  margin-top: 24px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary, #8a7f78);
+  letter-spacing: 0.3px;
+  max-width: 260px;
+  z-index: 1;
+}
+.miffy-loading-deco {
+  position: absolute;
+  opacity: 0.4;
+  pointer-events: none;
+  animation: miffy-float 3.2s ease-in-out infinite;
+  z-index: 0;
+}
+.miffy-loading-deco.deco-1 { top: 10%; left: 10%; }
+.miffy-loading-deco.deco-2 { top: 14%; right: 12%; animation-delay: .8s; }
+.miffy-loading-deco.deco-3 { bottom: 14%; left: 14%; animation-delay: 1.4s; }
+.miffy-loading-deco.deco-4 { bottom: 10%; right: 10%; animation-delay: .4s; }
+
+@keyframes miffy-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes miffy-float {
+  0%, 100% { transform: translateY(0) rotate(-5deg); }
+  50% { transform: translateY(-8px) rotate(5deg); }
+}
+
+/* ==================== 统计页手机端适配 ==================== */
+@media (max-width: 640px) {
+  .page-header.stats-header { flex-wrap: wrap; }
+  .page-header.stats-header > div:last-child {
+    flex-basis: 100%; justify-content: center; margin-top: 6px;
+  }
+  .stats-row.stats-page { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .month-compare .mc-row { flex-wrap: wrap; gap: 3px 10px; }
+  .month-compare .mc-label { flex: 0 0 auto; }
+  .month-compare .mc-cur { flex: 0 0 auto; }
+  .month-compare .mc-prev { flex-basis: 100%; font-size: 12px; }
+  .chart-section { padding: 12px; }
+  .day-calendar { gap: 3px; padding: 6px; }
+  .day-dot { font-size: 11px; }
+  .pie-legend-name, .pie-legend-amount { font-size: 13px; }
+}
+@media (max-width: 380px) {
+  .stats-row.stats-page { gap: 8px; }
+  .stat-card .stat-value { font-size: 16px; }
+  .stats-dim-tabs .filter-chip { padding: 6px 10px; font-size: 12px; }
+}
+
+/* ==================== 统计页图表区：flex 竖排 + 防溢出（核心修复） ==================== */
+.stats-charts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+.stats-charts-grid > .chart-section {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+/* 折线图：微信浏览器对大 viewBox(700) 缩放有 bug，强制约束 */
+.stats-charts-grid .line-chart-svg {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+  height: auto;
+  min-width: 0;
+}
+/* 环形图响应式 */
+.stats-charts-grid .donut-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.stats-charts-grid .donut-svg {
+  width: 100%;
+  max-width: 180px;
+  height: auto;
+  aspect-ratio: 1;
+}
+/* 模块环防溢出 */
+.stats-charts-grid .module-ring-row { flex-wrap: wrap; }
+.stats-charts-grid .module-ring-info { min-width: 0; overflow: hidden; }
+.stats-charts-grid .module-ring-name { white-space: normal; word-break: break-all; }
+/* 图例项防溢出 */
+.stats-charts-grid .pie-legend-item { flex-wrap: wrap; }
+.stats-charts-grid .pie-legend-name { white-space: normal; word-break: break-word; min-width: 0; }

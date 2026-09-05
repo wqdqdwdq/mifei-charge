@@ -17,3 +17,8 @@ server/uploads/
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 陈旧副本 / 备份（非运行文件，index.html 实际不加载以下副本）
+public/js/app.server.js
+public/index.server.html
+*.bak*

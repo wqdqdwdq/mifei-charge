@@ -7,6 +7,7 @@ const billRoutes = require('./routes/bills');
 const categoryRoutes = require('./routes/categories');
 const moduleRoutes = require('./routes/modules');
 const statsRoutes = require('./routes/stats');
+const familyRoutes = require('./routes/family');
 const { initSchema } = require('./db');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/bills', billRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/modules', moduleRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/family', familyRoutes);
 
 // 未知 API 路径
 app.use('/api', (req, res) => {

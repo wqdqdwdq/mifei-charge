@@ -23,12 +23,16 @@ router.get('/overview', authMiddleware, async (req, res) => {
     const lastEndDay = new Date(lastYear, lastMonth, 0).getDate();
     const lastEndDate = `${lastYear}-${String(lastMonth).padStart(2, '0')}-${String(lastEndDay).padStart(2, '0')}`;
 
-    // 本月收支
+    // 本月收支（区分“工资”类收入与其他收入）
     const monthStats = await db.get(`
       SELECT
-        COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as income,
-        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as expense
-      FROM bills WHERE user_id = ? AND date BETWEEN ? AND ?
+        COALESCE(SUM(CASE WHEN b.type = 'income' THEN amount ELSE 0 END), 0) as income,
+        COALESCE(SUM(CASE WHEN b.type = 'income' AND c.name = '工资' THEN amount ELSE 0 END), 0) as salary_income,
+        COALESCE(SUM(CASE WHEN b.type = 'income' AND (c.name IS NULL OR c.name <> '工资') THEN amount ELSE 0 END), 0) as other_income,
+        COALESCE(SUM(CASE WHEN b.type = 'expense' THEN amount ELSE 0 END), 0) as expense
+      FROM bills b
+      LEFT JOIN categories c ON b.category_id = c.id
+      WHERE b.user_id = ? AND b.date BETWEEN ? AND ?
     `, [userId, startDate, endDate]);
 
     // 上月支出
@@ -37,10 +41,20 @@ router.get('/overview', authMiddleware, async (req, res) => {
       FROM bills WHERE user_id = ? AND type = 'expense' AND date BETWEEN ? AND ?
     `, [userId, lastStartDate, lastEndDate]);
 
+    // 模块总金额（所有资金模块的预算之和）
+    const moduleBudget = await db.get(`
+      SELECT COALESCE(SUM(budget_amount), 0) as total
+      FROM fund_modules WHERE user_id = ?
+    `, [userId]);
+
     res.json({
       income: monthStats.income,
+      salaryIncome: monthStats.salary_income,
+      otherIncome: monthStats.other_income,
       expense: monthStats.expense,
-      balance: monthStats.income - monthStats.expense,
+      moduleBudget: moduleBudget.total,
+      balance: monthStats.salary_income - monthStats.expense,
+      disposable: moduleBudget.total - monthStats.expense,
       lastMonthExpense: lastMonthExpense.expense,
       compareRatio: lastMonthExpense.expense > 0
         ? Math.round(((monthStats.expense - lastMonthExpense.expense) / lastMonthExpense.expense) * 1000) / 10
@@ -102,7 +116,7 @@ router.get('/category-expense', authMiddleware, async (req, res) => {
       JOIN categories c ON b.category_id = c.id
       JOIN categories p ON c.parent_id = p.id
       WHERE b.user_id = ? AND b.type = 'expense' AND b.date BETWEEN ? AND ?
-      GROUP BY p.id
+      GROUP BY p.id, p.name, p.icon
       ORDER BY total DESC
     `, [userId, startDate, endDate]);
 
@@ -114,7 +128,7 @@ router.get('/category-expense', authMiddleware, async (req, res) => {
       JOIN categories c ON b.category_id = c.id
       JOIN categories p ON c.parent_id = p.id
       WHERE b.user_id = ? AND b.type = 'expense' AND b.date BETWEEN ? AND ?
-      GROUP BY c.id
+      GROUP BY c.id, c.name, c.icon, p.id, p.name
       ORDER BY total DESC
       LIMIT 20
     `, [userId, startDate, endDate]);
@@ -156,7 +170,7 @@ router.get('/category-income', authMiddleware, async (req, res) => {
       FROM bills b
       JOIN categories c ON b.category_id = c.id
       WHERE b.user_id = ? AND b.type = 'income' AND b.date BETWEEN ? AND ?
-      GROUP BY c.id
+      GROUP BY c.id, c.name, c.icon
       ORDER BY total DESC
     `, [userId, startDate, endDate]);
 
@@ -193,7 +207,7 @@ router.get('/modules', authMiddleware, async (req, res) => {
       FROM fund_modules f
       LEFT JOIN bills b ON b.fund_module_id = f.id
       WHERE f.user_id = ?
-      GROUP BY f.id
+      GROUP BY f.id, f.name, f.icon, f.budget_amount, f.spent_amount
       ORDER BY f.sort_order, f.created_at
     `, [startDate, endDate, startDate, endDate, userId]);
 
@@ -238,7 +252,7 @@ router.get('/yearly', authMiddleware, async (req, res) => {
       FROM bills b
       JOIN categories c ON b.category_id = c.id
       WHERE b.user_id = ? AND b.type = 'expense' AND b.date BETWEEN ? AND ?
-      GROUP BY c.id
+      GROUP BY c.id, c.name, c.icon
       ORDER BY total DESC
       LIMIT 10
     `, [userId, startDate, endDate]);
@@ -250,7 +264,7 @@ router.get('/yearly', authMiddleware, async (req, res) => {
       FROM bills b
       JOIN categories c ON b.category_id = c.id
       WHERE b.user_id = ? AND b.type = 'income' AND b.date BETWEEN ? AND ?
-      GROUP BY c.id
+      GROUP BY c.id, c.name, c.icon
       ORDER BY total DESC
       LIMIT 10
     `, [userId, startDate, endDate]);

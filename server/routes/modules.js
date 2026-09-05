@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { db } = require('../db');
 const { authMiddleware } = require('../auth');
+const { resetModuleSpent } = require('../periodUtil');
 
 // 上传配置
 const uploadDir = path.join(__dirname, '../uploads');
@@ -35,6 +36,9 @@ router.get('/', authMiddleware, async (req, res) => {
       SELECT * FROM fund_modules WHERE user_id = ? ORDER BY sort_order, created_at
     `, [req.user.id]);
 
+    // 跨周期自动清零已用金额（预算不变 = 继承上月金额）
+    await Promise.all(modules.map(m => resetModuleSpent(db, m)));
+
     // 计算剩余金额
     const result = modules.map(m => ({
       ...m,
@@ -54,6 +58,9 @@ router.get('/:id', authMiddleware, async (req, res) => {
     const module = await db.get('SELECT * FROM fund_modules WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!module) return res.status(404).json({ error: '资金模块不存在' });
+
+    // 跨周期自动清零已用金额（预算不变 = 继承上月金额）
+    await resetModuleSpent(db, module);
 
     const billCount = await db.get('SELECT CAST(COUNT(*) AS INTEGER) as count FROM bills WHERE fund_module_id = ?', [req.params.id]);
 

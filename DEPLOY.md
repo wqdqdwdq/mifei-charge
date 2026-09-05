@@ -54,14 +54,14 @@ systemctl restart miffy-backend miffy-frontend
 ```
 
 ## 数据与备份
-- 数据库（SQLite）：`/opt/miffy-account/server/data/miffy.db`（含 WAL 文件）
+- 数据库（PostgreSQL）：库名 `miffy`、用户 `miffy`，连接串由 `miffy-backend.service` 的 `DATABASE_URL` 提供
 - 用户上传（头像/模块图标）：`/opt/miffy-account/server/uploads/`
-- 备份建议：停服或低峰期直接 `tar czf backup.tar.gz server/data server/uploads` 拷回本地。
+- 备份建议：低峰期用 `pg_dump -U miffy miffy > miffy_$(date +%F).sql` 导出后拷回本地。
 
 ## 故障排查
 - **页面打不开 / 404**：先 `nginx -s reload`（nginx 首次启动偶发配置未生效）；再看 `ss -tlnp` 确认 8080/8081/80 都在监听。
 - **上传图片失败**：检查 `server/uploads/` 目录权限，`client_max_body_size 2M`（nginx 已设）。
-- **依赖问题**：better-sqlite3 为原生模块，重装时若无预编译二进制会现场编译，需 `build-essential` + `python3`（已装）。
+- **依赖问题**：依赖含 `pg`（PostgreSQL 驱动）；重装后需确保 `miffy-backend.service` 的 `DATABASE_URL` 指向正确的数据库。
 
 ## 环境版本
 - Node 18.20.4 / npm 9.2.0（Debian 系统包；better-sqlite3 ^11 兼容 Node 18）
